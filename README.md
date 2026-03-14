@@ -50,7 +50,7 @@ FoodVolumeMeasure/
 - Processed image display with bounding boxes
 - Multiple detections with confidence scores
 - Volume and calorie output cards
-- Result report download (JSON)
+- Result report download (PDF)
 - Dark mode toggle
 - History table from backend
 
