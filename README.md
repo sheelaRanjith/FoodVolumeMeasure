@@ -111,3 +111,4 @@ Frontend runs at: `http://localhost:5173`
 - Default YOLO model is `yolov8n.pt`; update `MODEL_PATH` in `.env` for a custom food-tuned model.
 - Better food detection accuracy requires training YOLOv8 with a food dataset.
 - The volume formula is an approximation based on 2D bounding box and assumed depth.
+- If you run into PyTorch 2.6+ checkpoint loading issues, keep `MODEL_TRUSTED_SOURCE=true` for trusted YOLO weights or provide a compatible checkpoint.

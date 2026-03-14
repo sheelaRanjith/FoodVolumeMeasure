@@ -1,9 +1,10 @@
 import os
+from contextlib import contextmanager
 from datetime import datetime
 
 import cv2
 
-from config import MODEL_PATH, PIXELS_PER_CM
+from config import MODEL_PATH, MODEL_TRUSTED_SOURCE, PIXELS_PER_CM
 
 CALORIE_DENSITY = {
     'apple': 0.52,
@@ -16,15 +17,72 @@ CALORIE_DENSITY = {
 }
 
 
+@contextmanager
+def _patched_torch_load_if_trusted():
+    """Force torch.load(weights_only=False) for trusted model checkpoints.
+
+    PyTorch 2.6 switched the default `weights_only` argument from False to True,
+    which can break loading older/some Ultralytics checkpoints.
+    """
+
+    if not MODEL_TRUSTED_SOURCE:
+        yield
+        return
+
+    try:
+        import torch
+    except Exception:
+        yield
+        return
+
+    original_torch_load = torch.load
+
+    def patched_torch_load(*args, **kwargs):
+        kwargs.setdefault('weights_only', False)
+        return original_torch_load(*args, **kwargs)
+
+    torch.load = patched_torch_load
+    try:
+        yield
+    finally:
+        torch.load = original_torch_load
+
+
 class CVService:
     def __init__(self):
         self.model = None
         self.model_error = None
+        self._load_model()
+
+    def _load_model(self):
         try:
             from ultralytics import YOLO
-            self.model = YOLO(MODEL_PATH)
+            import torch
+            from ultralytics.nn.tasks import (
+                ClassificationModel,
+                DetectionModel,
+                OBBModel,
+                PoseModel,
+                SegmentationModel,
+            )
+
+            if hasattr(torch, 'serialization') and hasattr(torch.serialization, 'add_safe_globals'):
+                torch.serialization.add_safe_globals([
+                    DetectionModel,
+                    SegmentationModel,
+                    PoseModel,
+                    ClassificationModel,
+                    OBBModel,
+                ])
+
+            with _patched_torch_load_if_trusted():
+                self.model = YOLO(MODEL_PATH)
         except Exception as exc:  # pragma: no cover - runtime setup dependent
-            self.model_error = str(exc)
+            trust_hint = (
+                ' Set MODEL_TRUSTED_SOURCE=true for trusted weights or use '
+                'a PyTorch/Ultralytics-compatible checkpoint.'
+            )
+            self.model_error = f'{exc}.{trust_hint}'
 
     def estimate_volume(self, width_px, height_px):
         width_cm = width_px / PIXELS_PER_CM
